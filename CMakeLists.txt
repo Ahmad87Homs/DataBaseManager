@@ -7,6 +7,8 @@ SET(CMAKE_CXX_FLAGS "-Wall")
 SET(CMAKE_CXX_FLAGS_DEBUG "-g")
 SET(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-project(data_base_manager)
+project(DB_Engine)
 
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/DiskManager/disk_manager.cpp  ${CMAKE_CURRENT_SOURCE_DIR}/BufferPoolManager/buffer_bool_manager.cpp)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/DiskManager   ${CMAKE_CURRENT_SOURCE_DIR}/BufferPoolManager)
