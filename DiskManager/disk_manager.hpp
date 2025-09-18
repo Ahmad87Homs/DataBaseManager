@@ -1,24 +1,27 @@
 #pragma once
 #include "page.hpp"
 #include <map>
+#include <fstream>
+#include <optional>
+#include <string>
 namespace DiskManager {
 
 // ---------- Disk manager ----------
 class DiskManager {
 public:
-  DiskManager(const std::string &filename);
+  explicit DiskManager(const std::string &filename);
 
   ~DiskManager();
-  bool readPage(uint32_t page_id, Page &page_out);
+  bool readPage(uint32_t page_id, IPage &page_out);
   // write (overwrite) page
-  void writePage(uint32_t page_id, const Page &page);
+  void writePage(uint32_t page_id, const IPage &page);
 
   // ensure page exists (zero-initialize if absent)
   void ensurePageExists(uint32_t page_id);
 
 private:
-  std::string file_name;
-  std::fstream fstream_;
+    std::string file_name;
+    std::fstream fstream_;
 };
 
 } // namespace DiskManager

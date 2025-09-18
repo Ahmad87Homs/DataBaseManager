@@ -1,76 +1,67 @@
-#include <array>
-#include <cstdint>
-#include <cstring>
-#include <fstream>
-#include <iostream>
-#include <list>
-#include <memory>
-#include <optional>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #pragma once
 #pragma pack(push, 1)
+#include "Ipage.hpp"
+#include <cstdint>
+#include <cstring>
 
 namespace DiskManager {
-// Basic constants
-constexpr size_t kPageSize = 4096;
-constexpr size_t kMaxSlots = 64; // example (adjustable)
-constexpr size_t kSlotEntrySize =
-    sizeof(uint16_t) /*offset*/ + sizeof(uint16_t) /*length*/;
-
-// helper: compute data area size
-constexpr std::size_t sizeOfDataArea() {
-  // reserve: page_id (4), page_type (2), row_count (2), free_ptr (2), reserved
-  // (2) + slots
-  constexpr std::size_t headerSize = sizeof(uint32_t) + sizeof(uint16_t) +
-                                     sizeof(uint16_t) + sizeof(uint16_t) +
-                                     sizeof(uint16_t);
-  return kPageSize - (headerSize + (kMaxSlots * kSlotEntrySize));
-}
-constexpr std::size_t startIndexOfDataArea() {
-  constexpr std::size_t headerSize = sizeof(uint32_t) + sizeof(uint16_t) +
-                                     sizeof(uint16_t) + sizeof(uint16_t) +
-                                     sizeof(uint16_t);
-  return headerSize + (kMaxSlots * kSlotEntrySize);
-}
-
-// slot directory entry
 struct Slot {
-  uint16_t offset;
-  uint16_t length;
+    uint16_t offset;
+    uint16_t size;
 };
 
-// page types
-enum class PageType : uint16_t {
-  UNUSED = 0,
-  HEAP = 1,
-  INDEX = 2,
-  OVERFLOW = 3
-};
+constexpr size_t kMaxSlots = 32;
+constexpr size_t sizeOfDataArea() {
+    return kPageSize - (sizeof(uint32_t) + sizeof(uint16_t) * 4 + sizeof(Slot) * kMaxSlots);
+}
 
-struct Page {
-  uint32_t page_id;   // page id
-  uint16_t page_type; // PageType
-  uint16_t row_count; // number of rows/slots used
-  uint16_t
-      free_space_ptr;    // offset within data[] where next row will be appended
-  uint16_t flags;        // reserved
-  Slot slots[kMaxSlots]; // slot directory (offset relative to start of data[])
-  uint8_t data[sizeOfDataArea()]; // payload area
+class HeapPage : public IPage {
+public:
+    struct page_header_t {
+        uint32_t page_id;
+        uint16_t page_type;
+        uint16_t row_count;
+        uint16_t free_space_ptr;
+        uint16_t flags;
+    };
 
-  // initialize page
-  void init(uint32_t pid, PageType type = PageType::HEAP) {
-    page_id = pid;
-    page_type = static_cast<uint16_t>(type);
-    row_count = 0;
-    free_space_ptr = 0; // relative to data[]
-    flags = 0;
-    // zero slots and data for safety
-    std::memset(slots, 0, sizeof(slots));
-    std::memset(data, 0, sizeof(data));
-  }
+    struct slot_directory_t {
+        Slot slots[kMaxSlots];
+    };
+
+    struct data_area_t {
+        uint8_t data[sizeOfDataArea()];
+    };
+    struct {
+          page_header_t header;
+          slot_directory_t slot_directory;
+          data_area_t data_area;  
+    } data;
+    HeapPage() { init(0); }
+
+    void init(uint32_t pid, PageType type = PageType::HEAP) {
+        data.header.page_id = pid;
+         data.header.page_type = static_cast<uint16_t>(type);
+         data.header.row_count = 0;
+         data.header.free_space_ptr = 0;
+         data.header.flags = 0;
+        std::memset( data.slot_directory.slots, 0, sizeof( data.slot_directory.slots));
+        std::memset( data.data_area.data, 0, sizeof( data.data_area.data));
+    }
+
+    // --- Implement IPage interface ---
+    uint32_t getPageId() const override { return  data.header.page_id; }
+    PageType getPageType() const override { return static_cast<PageType>( data.header.page_type); }
+    uint16_t getRowCount() const override { return  data.header.row_count; }
+    uint16_t getFreeSpacePointer() const override { return  data.header.free_space_ptr; }
+
+    void toBytes(uint8_t* out) const override {
+        std::memcpy(out,  &data, sizeof(this->data));
+    }
+
+    void fromBytes(const uint8_t* in) override {
+        std::memcpy(&data, in, sizeof(this->data));
+    }
 };
 #pragma pack(pop)
 

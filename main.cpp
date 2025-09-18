@@ -1,74 +1,66 @@
 #include "disk_manager.hpp"
 
-// ---------- Simple PageManager that writes records into Page.data ----------
-struct SimpleRow {
-  int32_t id;
-  char name[20];
-};
-
-class SimplePageManager {
-public:
-  // insert row into page; returns slot index or -1 on failure
-  static int insert(DiskManager::Page &page, const SimpleRow &r) {
-    // check capacity
-    if (page.row_count >= DiskManager::kMaxSlots)
-      return -1;
-    size_t freePtr = page.free_space_ptr;
-    if (freePtr + sizeof(SimpleRow) > sizeof(page.data))
-      return -1;
-
-    // copy bytes
-    std::memcpy(page.data + freePtr, &r, sizeof(SimpleRow));
-    // record slot (offset relative to data[] start)
-    page.slots[page.row_count].offset = static_cast<uint16_t>(freePtr);
-    page.slots[page.row_count].length =
-        static_cast<uint16_t>(sizeof(SimpleRow));
-    page.row_count++;
-    page.free_space_ptr = static_cast<uint16_t>(freePtr + sizeof(SimpleRow));
-    return static_cast<int>(page.row_count - 1);
-  }
-
-  static std::optional<SimpleRow> read(const DiskManager::Page &page,
-                                       int slot) {
-    if (slot < 0 || slot >= page.row_count)
-      return std::nullopt;
-    const DiskManager::Slot &s = page.slots[slot];
-    SimpleRow r{};
-    std::memcpy(&r, page.data + s.offset, s.length);
-    return r;
-  }
-};
+#include <memory>
+#include <chrono>
 
 #include "BufferPoolManager/buffer_bool_manager.hpp"
 // ---------- Example usage ----------
 int main() {
-  std::cout << "Main Page Size [Bytes]" << sizeof(DiskManager::Page)
+  std::cout << "Main Page Size [Bytes]" <<  sizeof(DiskManager::HeapPage::data) 
             << std::endl;
-  BufferPoolManager::BufferPool pool(10); // pool with 3 frames
 
-  // create a page and write via buffer pool
-  DiskManager::Page p0 = pool.fetchPage(0).value_or(DiskManager::Page{});
-  // Insert some rows
-  SimpleRow r1{1, "Alice"};
-  SimpleRow r2{2, "Bob"};
-  SimpleRow r3{3, "Carol"};
-  SimplePageManager::insert(p0, r1);
-  SimplePageManager::insert(p0, r2);
-  SimplePageManager::insert(p0, r3);
-  std::cout << "Inserted 3 rows into page 0, row_count=" << p0.row_count
-            << "\n";
-  pool.writePage(0, p0);
 
-  // read back via buffer pool
-  DiskManager::Page p0_read = pool.fetchPage(0).value_or(DiskManager::Page{});
-  std::cout << "Read back page 0, row_count=" << p0_read.row_count << "\n";
-  for (int i = 0; i < p0_read.row_count; i++) {
-    auto r = SimplePageManager::read(p0_read, i);
-    if (r) {
-      std::cout << " Row " << i << ": id=" << r->id << ", name=" << r->name
-                << "\n";
-    }
-  }
 
+
+
+BufferPoolManager::BufferPool buffer_pool(10);
+auto time_start = std::chrono::high_resolution_clock::now();
+{
+  auto fetched_page0 = buffer_pool.fetchPage("table1", 0);
+  auto fetched_page1 = buffer_pool.fetchPage("table1", 1);
+  auto fetched_page2 = buffer_pool.fetchPage("table1", 2);
+  auto fetched_page3 = buffer_pool.fetchPage("table1", 3);
+}
+auto time_end = std::chrono::high_resolution_clock::now();
+auto duration = std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start).count();
+std::cout << "Time taken to fetch 4 pages: " << duration << " microseconds" << std::endl;
+
+
+auto time_start1 = std::chrono::high_resolution_clock::now();
+{
+  auto fetched_page0 = buffer_pool.fetchPage("table1", 0);
+  auto fetched_page1 = buffer_pool.fetchPage("table1", 1);
+  auto fetched_page2 = buffer_pool.fetchPage("table1", 2);
+  auto fetched_page3 = buffer_pool.fetchPage("table1", 3);
+}
+auto time_end1 = std::chrono::high_resolution_clock::now();
+auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time_end1 - time_start1).count();
+std::cout << "Time taken to fetch 4 pages: " << duration1 << " microseconds" << std::endl;
+
+buffer_pool.writePage("table1", 0);
+buffer_pool.writePage("table1", 2);
+buffer_pool.writePage("table1", 3);
+
+buffer_pool.writePage("table2", 1);
+auto fetched_page1 = buffer_pool.fetchPage("table1", 0);
+if (fetched_page1) {
+    std::cout << "Fetched Page ID from table1: " << std::endl;
+} else {    
+    std::cout << "Failed to fetch page 0 from table1" << std::endl;   
+}
+
+(*fetched_page1)->page->fromBytes(reinterpret_cast<const uint8_t*>("Hello, World!"));
+(*fetched_page1)->is_dirty=true;
+buffer_pool.writePage("table1", 0); // Mark as dirty and write back to disk
+
+auto fetched_page2 = buffer_pool.fetchPage("table1", 2);
+(*fetched_page2)->page->fromBytes(reinterpret_cast<const uint8_t*>("XXXXXXXXXXXXXXXXXXXXXXXXXXXXX"));
+(*fetched_page2)->is_dirty=true;
+buffer_pool.writePage("table1", 2); // Mark as dirty and write back to disk
+
+auto fetched_page3 = buffer_pool.fetchPage("table1", 3);
+(*fetched_page3)->page->fromBytes(reinterpret_cast<const uint8_t*>("YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"));
+(*fetched_page3)->is_dirty=true;
+buffer_pool.writePage("table1", 3); // Mark as dirty and write back to disk
   return 0;
 }

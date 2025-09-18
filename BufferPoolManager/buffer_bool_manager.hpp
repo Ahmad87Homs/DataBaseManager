@@ -2,46 +2,50 @@
 #include "../DiskManager/disk_manager.hpp"
 #include <iostream>
 #include <map>
+#include <array>
 #include <stdint.h>
+#include <memory>
+#include <optional>
+#include <vector>
+
+
 namespace BufferPoolManager {
+
+constexpr size_t kTableNum=3;
+constexpr std::array<const char*,kTableNum> file_list{"table1","table2","table3"};
+
+/* [file id ] [diskhandler, [page id, [is dirty page , content ] ]    */
+
+/**
+ * @brief Represents the content of a page in the buffer pool.
+ * 
+ * @param is_dirty Indicates whether the page has been modified (dirty).
+ * @param page Shared pointer to the actual page data.
+ */
+struct page_content {
+    bool is_dirty; ///< Indicates if the page is dirty (modified).
+    std::shared_ptr<DiskManager::IPage> page; ///< Pointer to the page data.
+}; 
+struct FileHandle {
+    std::shared_ptr<DiskManager::DiskManager> disk_manager;
+    std::map<uint32_t, page_content> page_table;
+};
+
 
 class BufferPool {
 public:
-  BufferPool(size_t pool_size)
-      : buffer_size_(pool_size), disk_manager_(file_name_) {
-    std::cout << "Buffer Pool of size " << buffer_size_ << " created.\n";
-  }
+  BufferPool(size_t pool_size);
 
-  std::optional<DiskManager::Page> fetchPage(uint32_t page_id) {
-    auto it = page_table_.find(page_id);
-    if (it != page_table_.end()) {
-      return it->second;
-    }
+  void writePage(const std::string& table,uint32_t page_id) ;
+/* to fetch page  : table name and page id is required , and return is shared pointer to page content */
+  std::optional<page_content*> fetchPage(const std::string& table, uint32_t page_id);
 
-    if (disk_manager_.readPage(page_id, page_table_[page_id])) {
-      return page_table_[page_id];
-    }
-    return std::nullopt;
-  }
 
-  void writePage(uint32_t page_id, const DiskManager::Page &page) {
-    if (page_table_.find(page_id) != page_table_.end()) {
-      std::cout << "Writing page " << page_id << " to buffer pool.\n";
-    } else {
-
-      std::cerr << "Page " << page_id << " not found in buffer pool.\n";
-    }
-    page_table_[page_id] = page;
-    disk_manager_.writePage(page_id, page);
-  }
-
-  ~BufferPool() {}
+  ~BufferPool() ;
 
 private:
   std::size_t buffer_size_{0};
-  std::string file_name_{"db_pages.bin"};
-  DiskManager::DiskManager disk_manager_;
-  std::map<uint32_t, DiskManager::Page> page_table_;
+  std::map<std::string,FileHandle> file_table;
 };
 
 } // namespace BufferPoolManager
